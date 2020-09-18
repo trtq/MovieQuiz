@@ -14,7 +14,7 @@ export enum SCREENS {
 }
 
 export const QuizNavigator = () => (
-  <Stack.Navigator initialRouteName={SCREENS.Home}>
+  <Stack.Navigator initialRouteName={SCREENS.Home} headerMode={'none'}>
     <Stack.Screen name={SCREENS.Home} component={HomeScreen} />
     <Stack.Screen name={SCREENS.Game} component={GameScreen} />
     <Stack.Screen name={SCREENS.CV} component={CVScreen} />
