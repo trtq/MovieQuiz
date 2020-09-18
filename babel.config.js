@@ -8,6 +8,7 @@ module.exports = {
         extensions: ['.ts', '.tsx', '.js', '.ios.js', '.android.js'],
         alias: {
           _: './src',
+          assets: './assets',
         },
       },
     ],

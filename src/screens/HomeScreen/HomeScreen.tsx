@@ -1,14 +1,13 @@
 import React from 'react';
 import { SafeAreaView, Button } from 'react-native';
+import { MenuButton } from '_/components/MenuButton';
 import { SCREENS } from '_/router/QuizNavigator';
-import { Ball } from './layouts';
 import { HomeScreenProps } from './types';
 
 export const HomeScreen = ({ navigation }: HomeScreenProps) => {
   return (
     <SafeAreaView>
-      <Ball />
-      <Button title="Go to Details" onPress={() => navigation.navigate(SCREENS.Game)} />
+      <MenuButton onPress={() => navigation.navigate(SCREENS.Game)}>Start the game</MenuButton>
     </SafeAreaView>
   );
 };
