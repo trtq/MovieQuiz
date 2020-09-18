@@ -1,56 +1,39 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { observer } from 'mobx-react-lite';
-import { SafeAreaView, TouchableOpacity, TextInput, View, Text, StyleSheet } from 'react-native';
-import { useStore } from './src/stores/useStore';
-import { StoreProvider } from './src/stores/StoreProvider';
-import { BugsHeader } from './src/components/BugsHeader';
-import { QuizNavigator } from './src/router/QuizNavigator';
 import { NavigationContainer } from '@react-navigation/native';
+import { StoreProvider } from '_/stores/StoreProvider';
+import { QuizNavigator } from '_/router/QuizNavigator';
+import { ThemedStyledProps, ThemeProvider } from 'styled-components';
 
-const BugsList = observer(() => {
-  const store = useStore();
-
-  return (
-    <View>
-      {store.gameStore.bugs.map((bug) => (
-        <Text key={bug}>{bug}</Text>
-      ))}
-    </View>
-  );
-});
-
-const BugsForm = () => {
-  const store = useStore();
-  const [bug, setBug] = React.useState('');
-
-  return (
-    <View>
-      <TextInput
-        value={bug}
-        style={{ borderWidth: 1 }}
-        onChange={(e) => {
-          setBug(e.nativeEvent.text);
-        }}
-      />
-      <TouchableOpacity
-        onPress={() => {
-          store.gameStore.addBug(bug);
-          setBug('');
-        }}
-      >
-        <Text>Add</Text>
-      </TouchableOpacity>
-    </View>
-  );
+const darkTheme = {
+  dark: true,
+  background: '#00043d',
+  textOnBackground: '#f6f6ff',
+  primary: '#f6f6ff',
+  textOnPrimary: '#010111',
+  border: '#010111',
 };
+
+const lightTheme = {
+  dark: false,
+  background: '#f1f1ff',
+  textOnBackground: '#010111',
+  primary: '#e6e8ff',
+  textOnPrimary: '#010111',
+  border: '#c9c9ff',
+};
+
+export type TTheme = typeof darkTheme;
+export type TThemedProps<P> = ThemedStyledProps<P, TTheme>;
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <StoreProvider>
-        <QuizNavigator />
-      </StoreProvider>
-    </NavigationContainer>
+    <StoreProvider>
+      <NavigationContainer>
+        <ThemeProvider theme={darkTheme}>
+          <QuizNavigator />
+        </ThemeProvider>
+      </NavigationContainer>
+    </StoreProvider>
   );
 }
