@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
-import { createGameStore, TGameStore } from './GameStore';
 import { useLocalStore } from 'mobx-react-lite';
+import { createGameStore, TGameStore } from './GameStore';
 
 export const storeContext = React.createContext<{ gameStore: TGameStore } | null>(null);
 
