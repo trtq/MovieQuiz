@@ -1,9 +1,11 @@
 import React from 'react';
 import { Button, ButtonText } from './layouts';
+import { TMenuButtonProps } from './types';
 
-export const MenuButton = ({ onPress, children }) => {
+// a button
+export const MenuButton = ({ onPress, children, disabled }: TMenuButtonProps) => {
   return (
-    <Button onPress={onPress}>
+    <Button disabled={!!disabled} onPress={onPress}>
       <ButtonText>{children}</ButtonText>
     </Button>
   );

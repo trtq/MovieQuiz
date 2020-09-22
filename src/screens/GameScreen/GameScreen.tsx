@@ -1,157 +1,224 @@
 import React, { useEffect, useState } from 'react';
-import { Image, SafeAreaView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native';
 import { useTimingTransition } from 'react-native-redash';
 import FastImage from 'react-native-fast-image';
-import { useCode, call } from 'react-native-reanimated';
-import { pictureUrlRoot } from '_/utils/constants';
-import { MovieDB_API } from '_/utils/key';
+import { observer } from 'mobx-react-lite';
+import { interpolate, concat } from 'react-native-reanimated';
+import { pictureUrlRoot } from '_/utils/ApiAddresses';
+import { QuizAnswer } from '_/components/QuizAnswer';
+import { Healthbar } from '_/components/HealthBar';
+import { Loading } from '_/components/Loading';
+import { SCREENS } from '_/router/QuizNavigator';
+import { HighScore } from '_/components/HighScore';
+import { useStore } from '_/stores/useStore';
+import { SwapThemeButton } from '_/components/SwapThemeButton';
+import { GoBackButton } from '_/components/GoBackButton';
+import { TGameScreenProps } from './types';
 import {
   MovieCard,
   QuestionText,
   QuizWrap,
-  AnswerWrap,
-  AnswerText,
   BackgroundImage,
   MovieCardImage,
   Container,
+  HealthbarContainer,
+  AnswerTextContainer,
+  AnswerText,
+  ResultMark,
+  LoadingContainer,
+  GoBackContainer,
+  HighScoreContainer,
+  SafeWrap,
+  ReplayButtonContainer,
+  ReplayButton,
+  ThemeButtonContainer,
 } from './layouts';
-import { TQuestion } from './types';
 
-const fadeDuration = 1000;
+export const fadeDuration = 300;
+const answerWaitDuration = 1200;
 
-const shuffleArray = (array: unknown[]) => {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-};
+export const GameScreen = observer(({ navigation }: TGameScreenProps) => {
+  const {
+    gameStore: {
+      gameState: { question, nextQuestion, health },
+      setQuestion,
+      swapQuestions,
+      recieveDamage,
+      upScore,
+      loadQuestions,
+      cleanUpLoadingQuestions,
+      newGame,
+      numberOfLoads,
+    },
+  } = useStore();
 
-const generateQuestion = async () => {
-  try {
-    const year = 2020 - Math.round(Math.random() * 20);
-    const page = 1 + Math.round(Math.random() * 3);
-    const moviesResp = await fetch(
-      `https://api.themoviedb.org/3/discover/movie?api_key=${MovieDB_API}&language=en-US&sort_by=vote_count.desc&page=${page}&primary_release_year=${year}&with_original_language=en`,
-    );
-    const moviesJSON = await moviesResp.json();
-    if (moviesJSON && moviesJSON.results) {
-      const movie = moviesJSON.results[Math.floor(Math.random() * moviesJSON.results.length)];
-      const similarResp = await fetch(
-        `https://api.themoviedb.org/3/movie/${movie.id}/similar?api_key=ed5a3609078d0ace7b6337f3145fc188&language=en-US&page=1`,
-      );
-      const similarJSON = await similarResp.json();
-      if (similarJSON && similarJSON.results) {
-        const result = {
-          id: movie.id,
-          picture: movie.backdrop_path,
-          answers: [{ id: movie.id, name: movie.original_title, correct: true }],
-        };
-        let similarsCopy = [...similarJSON.results];
-        similarsCopy = similarsCopy.slice(0, 8);
-        shuffleArray(similarsCopy);
-        const similarAnswers = similarsCopy.slice(0, 3);
-        for (const similar of similarAnswers) {
-          result.answers.push({ id: similar.id, name: similar.original_title, correct: false });
-        }
-        shuffleArray(result.answers);
-        return result;
-      } else {
-        console.log('couldnt get similar movies', similarJSON);
-        throw 'couldnt get similar movies';
-      }
-    } else {
-      console.log('no results', moviesJSON);
-      throw 'no results';
-    }
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-export const GameScreen = () => {
-  const [isShowingQuestion, setIsShowingQuestion] = useState<boolean>(false);
+  //used for fading questions in and out
+  const [isShowingQuestion, setIsShowingQuestion] = useState<boolean>(!!question);
   const questionOpacity = useTimingTransition(isShowingQuestion, { duration: fadeDuration });
+  //used for showing the loading screen. Additional value for rendering so that it wouldn't run animation constantly
+  const [isRenderingLoading, setIsRenderingLoading] = useState<boolean>(!question);
+  const [isLoading, setIsLoading] = useState<boolean>(!question);
+  const stopLoading = () => {
+    if (isLoading) {
+      //start fading out and then stop rendering once the animation is done
+      setIsLoading(false);
+      setTimeout(() => setIsRenderingLoading(false), fadeDuration);
+    }
+  };
+  // used for showing the error behind the loading circle when seveeral attempts to get a question fail
+  const [isShowingError, setIsShowingError] = useState<boolean>(false);
+  // used for disabling answer buttons once the answer is locked in
+  const [isAnswerGiven, setIsAnswerGiven] = useState<boolean>(false);
+  // if true substitutes a question for a game over screen
+  const [isGameOver, setIsGameOver] = useState<boolean>(false);
+  // used for animation to show a ⨉ or ✓ mark once the answer is locked
+  const [isShowingAnswer, setIsShowingAnswer] = useState<boolean>(false);
+  const answerOpacity = useTimingTransition(isShowingAnswer, { duration: fadeDuration });
+  const resultMarkRotate = concat(interpolate(answerOpacity, { inputRange: [0.5, 1], outputRange: [-40, -20] }), 'deg');
+  const resultMarkOpacity = interpolate(answerOpacity, { inputRange: [0.5, 0.7], outputRange: [0, 1] });
+  // depending on this you get ⨉ or ✓ once the answer is locked
+  const [wasAnswerCorrect, setWasAnswerCorrect] = useState<boolean>(false);
 
-  const [question, setQuestion] = useState<TQuestion | null>(null);
-  const [nextQuestion, setNextQuestion] = useState<TQuestion | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [numberOfLoads, setNumberOfLoads] = useState<number>(0);
-
+  // loadQuestions() is used to load up new questions. It happends any time the nextQuestion field is empty
+  // if the request throws, store increments numberOfLoads so it's called again
+  // cleanUpLoadingQuestions() cleans up the loop on unmounting
+  // every operation with local store is to set up a ton of animations that are happening at this point
   useEffect(() => {
     if (!nextQuestion) {
-      let potentialTimer: NodeJS.Timeout | null;
-      let fullLoad: boolean = false;
-      const aborter = new AbortController();
       if (!question) {
-        setIsLoading(true);
-        fullLoad = true;
-      }
-      Promise.all(fullLoad ? [generateQuestion(), generateQuestion()] : [generateQuestion()])
-        .then((values) => {
-          if (fullLoad) {
-            if (values[0] && values[1] && values[0].id !== values[1].id) {
-              setQuestion(values[0]);
-              FastImage.preload([{ uri: `${pictureUrlRoot}${values[0].picture}` }]);
-              setNextQuestion(values[1]);
-              FastImage.preload([{ uri: `${pictureUrlRoot}${values[1].picture}` }]);
-              setNumberOfLoads(0);
-              setIsLoading(false);
-              setIsShowingQuestion(true);
-            } else {
-              potentialTimer = setTimeout(() => setNumberOfLoads(numberOfLoads + 1), 500);
-            }
-          } else if (values[0] && values[0].id !== question?.id) {
-            setNextQuestion(values[0]);
-            setNumberOfLoads(0);
-            setIsLoading(false);
-            FastImage.preload([{ uri: `${pictureUrlRoot}${values[0].picture}` }]);
-          } else {
-            potentialTimer = setTimeout(() => setNumberOfLoads(numberOfLoads + 1), 1000);
-          }
-        })
-        .catch(() => {
-          if (!aborter.signal.aborted) {
-            potentialTimer = setTimeout(() => setNumberOfLoads(numberOfLoads + 1), 1000);
-          }
+        setIsRenderingLoading(true);
+        setTimeout(() => setIsLoading(true), 0);
+        if (numberOfLoads > 5 && !isShowingError) {
+          setIsShowingError(true);
+        }
+        loadQuestions(() => {
+          stopLoading();
+          setIsShowingError(false);
+          setTimeout(() => setIsShowingQuestion(true), 0); // sending it to the end of the stack to fight the rn-reanimated bug where it jitters on rerender
         });
-      return () => {
-        if (potentialTimer) clearTimeout(potentialTimer);
-        aborter.abort();
-      };
+      } else {
+        loadQuestions(() => {
+          stopLoading();
+          setIsShowingError(false);
+        });
+      }
+      return cleanUpLoadingQuestions;
     }
   }, [nextQuestion, numberOfLoads]);
 
+  // if the question is answerred and faded out the question field becomes null
+  // then this is called and it swaps question and nextQuestion fields
+  // the question is then rendered and nextQuestion field is now null triggering the above useEffect
   useEffect(() => {
     if (!question && nextQuestion) {
-      setQuestion(nextQuestion);
-      setNextQuestion(null);
-      setTimeout(() => setIsShowingQuestion(true), 0); // sending it to the end of the stack to fight the rn-reanimated bug where it jitters on rerender
+      swapQuestions();
+      setTimeout(() => setIsShowingQuestion(true), 0);
     }
   }, [question, nextQuestion]);
 
-  const changeQuestion = () => {
+  // when the nextQuestion field is filled this preloades the image
+  // no need to do this with question field as in all apropriate situations they come from nextQuestion anyway
+  useEffect(() => {
+    if (nextQuestion) FastImage.preload([{ uri: `${pictureUrlRoot}${nextQuestion.picture}` }]);
+  }, [nextQuestion]);
+
+  // triggers when the answer is locked, deals with the results and sets up loading of the new question
+  const onAnswer = (correct: boolean) => {
+    const savedHealth = health;
+    if (!correct) {
+      recieveDamage();
+    } else {
+      upScore();
+    }
+    setWasAnswerCorrect(correct);
+    setIsShowingAnswer(true);
+    setTimeout(() => setIsShowingQuestion(false), answerWaitDuration);
+    setTimeout(() => {
+      setIsAnswerGiven(false);
+      setIsShowingAnswer(false);
+      setQuestion(null);
+      if (!correct && savedHealth <= 1) setIsGameOver(true);
+    }, fadeDuration + answerWaitDuration);
+  };
+
+  // triggers on the press of a replay button on a game over screen
+  // resets animations and triggers newGame() wich resets the state too
+  const onRestart = () => {
     setIsShowingQuestion(false);
-    setTimeout(() => setQuestion(null), fadeDuration);
+    setIsRenderingLoading(true);
+    setIsShowingAnswer(false);
+    setIsAnswerGiven(false);
+    setTimeout(() => {
+      setIsGameOver(false);
+      setIsLoading(true);
+      newGame();
+    }, fadeDuration);
   };
 
   return (
     <Container>
       <BackgroundImage />
+      {isRenderingLoading && (
+        <LoadingContainer>
+          <Loading active={isLoading} showError={isShowingError} onAbandon={() => navigation.navigate(SCREENS.Home)} />
+        </LoadingContainer>
+      )}
       <SafeAreaView>
-        {question && (
-          <QuizWrap style={{ opacity: questionOpacity }}>
-            <QuestionText>What is the name of this movie?</QuestionText>
-            <MovieCard>
-              <MovieCardImage source={{ uri: `${pictureUrlRoot}${question.picture}` }} />
-            </MovieCard>
-            {question.answers.map((answer) => (
-              <AnswerWrap key={answer.id} onPress={changeQuestion}>
-                <AnswerText>{answer.name}</AnswerText>
-              </AnswerWrap>
-            ))}
-          </QuizWrap>
-        )}
+        <SafeWrap>
+          {question && (
+            <QuizWrap style={{ opacity: questionOpacity }}>
+              {!isGameOver ? (
+                <>
+                  <QuestionText>What is the name of this movie?</QuestionText>
+                  <MovieCard>
+                    <MovieCardImage source={{ uri: `${pictureUrlRoot}${question.picture}` }} />
+                    <AnswerTextContainer>
+                      {isShowingAnswer && (
+                        <AnswerText style={{ opacity: answerOpacity }}>{question.correctName}</AnswerText>
+                      )}
+                    </AnswerTextContainer>
+                    <ResultMark
+                      correct={wasAnswerCorrect}
+                      style={{ opacity: resultMarkOpacity, transform: [{ rotate: resultMarkRotate }] }}
+                    />
+                  </MovieCard>
+
+                  {question.answers.map((answer) => (
+                    <QuizAnswer
+                      key={answer.id}
+                      onPressOrCancel={setIsAnswerGiven}
+                      onResult={() => onAnswer(answer.correct)}
+                      correct={answer.correct}
+                      disabled={isAnswerGiven}
+                    >
+                      {answer.name}
+                    </QuizAnswer>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <QuestionText>GAME OVER!</QuestionText>
+                  <ReplayButtonContainer onPress={onRestart}>
+                    <ReplayButton />
+                  </ReplayButtonContainer>
+                </>
+              )}
+            </QuizWrap>
+          )}
+          <GoBackContainer>
+            <GoBackButton onPress={() => navigation.navigate(SCREENS.Home)} />
+          </GoBackContainer>
+          <HealthbarContainer>
+            <Healthbar />
+          </HealthbarContainer>
+          <HighScoreContainer>
+            <HighScore />
+          </HighScoreContainer>
+          <ThemeButtonContainer>
+            <SwapThemeButton />
+          </ThemeButtonContainer>
+        </SafeWrap>
       </SafeAreaView>
     </Container>
   );
-};
+});
