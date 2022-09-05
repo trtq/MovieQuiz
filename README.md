@@ -1,3 +1,6 @@
+# MovieQuiz 🚧🚧🚧🚧 2022 UPD
+I remade this app and the current version is [here](https://github.com/trtq/movie-quiz/). Please check that one out as I improved a lot of things.
+
 ![Movie Quiz](https://i.imgur.com/3o3V6hm.png "Movie Quiz")
 # MovieQuiz
 MovieQuiz is a game by Evgeny Ivanitsky (me) developed with React Native for mobile phones. During the game the player is shown a promotional photo or a still from a movie and several movie titles, one of which corresponds with the still. If the player pinpoints the correct title, the game moves on to the next still, if they don't, they lose a life, or, if the lives run out, they lose the game. The questions aren't prewritten, they are generated with the help of [The Movie Database](https://www.themoviedb.org/) And their API.
